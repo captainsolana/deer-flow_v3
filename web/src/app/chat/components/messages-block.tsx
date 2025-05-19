@@ -1,6 +1,4 @@
-// Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
-// SPDX-License-Identifier: MIT
-
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { FastForward, Play } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
@@ -50,6 +48,7 @@ export function MessagesBlock({ className }: { className?: string }) {
             abortSignal: abortController.signal,
           },
         );
+        saveQueryToLocalStorage(message, response);
       } catch {}
     },
     [feedback],
@@ -76,6 +75,22 @@ export function MessagesBlock({ className }: { className?: string }) {
     setFastForwarding(!fastForwarding);
     fastForwardReplay(!fastForwarding);
   }, [fastForwarding]);
+
+  useEffect(() => {
+    loadQueryHistory();
+  }, []);
+
+  const saveQueryToLocalStorage = (query: string, result: string) => {
+    const history = JSON.parse(localStorage.getItem("queryHistory") || "[]");
+    history.push({ query, result, timestamp: new Date().toISOString() });
+    localStorage.setItem("queryHistory", JSON.stringify(history));
+  };
+
+  const loadQueryHistory = () => {
+    const history = JSON.parse(localStorage.getItem("queryHistory") || "[]");
+    // Use the history data as needed
+  };
+
   return (
     <div className={cn("flex h-full flex-col", className)}>
       <MessageListView

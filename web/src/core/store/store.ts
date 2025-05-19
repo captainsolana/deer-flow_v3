@@ -1,6 +1,3 @@
-// Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
-// SPDX-License-Identifier: MIT
-
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import { create } from "zustand";
@@ -388,4 +385,10 @@ export function useToolCalls() {
         .flat();
     }),
   );
+}
+
+function saveQueryToLocalStorage(query: string, result: string) {
+  const history = JSON.parse(localStorage.getItem("queryHistory") || "[]");
+  history.push({ query, result, timestamp: new Date().toISOString() });
+  localStorage.setItem("queryHistory", JSON.stringify(history));
 }

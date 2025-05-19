@@ -1,6 +1,3 @@
-// Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
-// SPDX-License-Identifier: MIT
-
 import { env } from "~/env";
 
 import type { MCPServerMetadata } from "../mcp";
@@ -182,4 +179,10 @@ export async function sleepInReplay(ms: number) {
 let fastForwardReplaying = false;
 export function fastForwardReplay(value: boolean) {
   fastForwardReplaying = value;
+}
+
+function saveQueryToLocalStorage(query: string, result: string) {
+  const history = JSON.parse(localStorage.getItem("queryHistory") || "[]");
+  history.push({ query, result, timestamp: new Date().toISOString() });
+  localStorage.setItem("queryHistory", JSON.stringify(history));
 }
