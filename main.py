@@ -7,11 +7,31 @@ Entry point script for the DeerFlow project.
 
 import argparse
 import asyncio
+import json
+from datetime import datetime
 
 from InquirerPy import inquirer
 
 from src.config.questions import BUILT_IN_QUESTIONS, BUILT_IN_QUESTIONS_ZH_CN
 from src.workflow import run_agent_workflow_async
+
+
+def save_query_to_history(query, result):
+    history = []
+    try:
+        with open("query_history.json", "r") as file:
+            history = json.load(file)
+    except FileNotFoundError:
+        pass
+
+    history.append({
+        "query": query,
+        "result": result,
+        "timestamp": datetime.now().isoformat()
+    })
+
+    with open("query_history.json", "w") as file:
+        json.dump(history, file, indent=4)
 
 
 def ask(
@@ -30,7 +50,7 @@ def ask(
         max_step_num: Maximum number of steps in a plan
         enable_background_investigation: If True, performs web search before planning to enhance context
     """
-    asyncio.run(
+    result = asyncio.run(
         run_agent_workflow_async(
             user_input=question,
             debug=debug,
@@ -39,6 +59,7 @@ def ask(
             enable_background_investigation=enable_background_investigation,
         )
     )
+    save_query_to_history(question, result)
 
 
 def main(

@@ -7,6 +7,8 @@ Server script for running the DeerFlow API.
 
 import argparse
 import logging
+import json
+from datetime import datetime
 
 import uvicorn
 
@@ -17,6 +19,23 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+def save_query_to_history(query, result):
+    history = []
+    try:
+        with open("query_history.json", "r") as file:
+            history = json.load(file)
+    except FileNotFoundError:
+        pass
+
+    history.append({
+        "query": query,
+        "result": result,
+        "timestamp": datetime.now().isoformat()
+    })
+
+    with open("query_history.json", "w") as file:
+        json.dump(history, file, indent=4)
 
 if __name__ == "__main__":
     # Parse command line arguments
