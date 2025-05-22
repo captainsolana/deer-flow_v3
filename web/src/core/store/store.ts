@@ -4,6 +4,7 @@
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 
 import { chatStream, generatePodcast } from "../api";
@@ -13,11 +14,9 @@ import { parseJSON } from "../utils";
 
 import { getChatStreamSettings } from "./settings-store";
 
-const THREAD_ID = nanoid();
-
-export const useStore = create<{
+interface StoreState {
   responding: boolean;
-  threadId: string | undefined;
+  threadId: string;
   messageIds: string[];
   messages: Map<string, Message>;
   researchIds: string[];
@@ -26,26 +25,35 @@ export const useStore = create<{
   researchActivityIds: Map<string, string[]>;
   ongoingResearchId: string | null;
   openResearchId: string | null;
+}
 
+interface StoreActions {
   appendMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
   updateMessages: (messages: Message[]) => void;
   openResearch: (researchId: string | null) => void;
   closeResearch: () => void;
   setOngoingResearch: (researchId: string | null) => void;
-}>((set) => ({
-  responding: false,
-  threadId: THREAD_ID,
-  messageIds: [],
-  messages: new Map<string, Message>(),
-  researchIds: [],
-  researchPlanIds: new Map<string, string>(),
-  researchReportIds: new Map<string, string>(),
-  researchActivityIds: new Map<string, string[]>(),
-  ongoingResearchId: null,
-  openResearchId: null,
+  initializeNewThread: () => void;
+}
 
-  appendMessage(message: Message) {
+type StoreStateAndActions = StoreState & StoreActions;
+
+export const useStore = create(
+  persist<StoreStateAndActions>(
+    (set, get) => ({
+      responding: false,
+      threadId: nanoid(), // Initialize threadId here
+      messageIds: [],
+      messages: new Map<string, Message>(),
+      researchIds: [],
+      researchPlanIds: new Map<string, string>(),
+      researchReportIds: new Map<string, string>(),
+      researchActivityIds: new Map<string, string[]>(),
+      ongoingResearchId: null,
+      openResearchId: null,
+
+      appendMessage(message: Message) {
     set((state) => ({
       messageIds: [...state.messageIds, message.id],
       messages: new Map(state.messages).set(message.id, message),
@@ -72,7 +80,87 @@ export const useStore = create<{
   setOngoingResearch(researchId: string | null) {
     set({ ongoingResearchId: researchId });
   },
-}));
+  initializeNewThread: () => {
+    set({
+      threadId: nanoid(),
+      messageIds: [],
+      messages: new Map(),
+      // Optionally reset research states too
+      researchIds: [],
+      researchPlanIds: new Map(),
+      researchReportIds: new Map(),
+      researchActivityIds: new Map(),
+      ongoingResearchId: null,
+      openResearchId: null,
+    });
+  },
+}),
+{
+  name: "deerflow-chat-storage",
+  storage: createJSONStorage(() => localStorage),
+  partialize: (state) => ({
+    threadId: state.threadId,
+    messageIds: state.messageIds,
+    messages: Array.from(state.messages.entries()),
+    researchIds: state.researchIds,
+    researchPlanIds: Array.from(state.researchPlanIds.entries()),
+    researchReportIds: Array.from(state.researchReportIds.entries()),
+    researchActivityIds: Array.from(state.researchActivityIds.entries()),
+    ongoingResearchId: state.ongoingResearchId,
+    openResearchId: state.openResearchId,
+  }),
+  merge: (persistedState, currentState) => {
+    const loadedState = persistedState as any; // Cast to any to handle array form of messages
+    // Start with current state as base, then overwrite with persisted items
+    const mergedState = { ...currentState, ...loadedState };
+
+    if (loadedState.messages && Array.isArray(loadedState.messages)) {
+      mergedState.messages = new Map(loadedState.messages);
+    } else {
+      // If persisted is not an array (e.g. old format or error), keep current state's map or initialize new
+      mergedState.messages = currentState.messages || new Map();
+    }
+
+    if (loadedState.researchPlanIds && Array.isArray(loadedState.researchPlanIds)) {
+      mergedState.researchPlanIds = new Map(loadedState.researchPlanIds);
+    } else {
+      mergedState.researchPlanIds = currentState.researchPlanIds || new Map();
+    }
+
+    if (loadedState.researchReportIds && Array.isArray(loadedState.researchReportIds)) {
+      mergedState.researchReportIds = new Map(loadedState.researchReportIds);
+    } else {
+      mergedState.researchReportIds = currentState.researchReportIds || new Map();
+    }
+
+    if (loadedState.researchActivityIds && Array.isArray(loadedState.researchActivityIds)) {
+      mergedState.researchActivityIds = new Map(loadedState.researchActivityIds);
+    } else {
+      mergedState.researchActivityIds = currentState.researchActivityIds || new Map();
+    }
+    return mergedState;
+  },
+  onRehydrateStorage: () => {
+    return (rehydratedState, error) => {
+      if (error) {
+        console.error("Failed to rehydrate state from localStorage:", error);
+      }
+      // If threadId was not in the rehydratedState, it would be initialized by the default value in create() (i.e. nanoid())
+      // If rehydratedState exists and has a threadId, it will be used.
+      // If rehydratedState is undefined (e.g. first time, no storage), initial state from create() is used.
+      if (rehydratedState && !rehydratedState.threadId) {
+         // This case should ideally be handled by ensuring `threadId: nanoid()` in the initial state.
+         // If `threadId` could be `undefined` in storage from a previous version,
+         // we might need to explicitly set it here using `useStore.getState().initializeNewThread()`
+         // or `useStore.setState({ threadId: nanoid() })` but that's usually done outside `onRehydrateStorage`
+         // or by ensuring the initial state is robust.
+         // For now, we rely on `threadId: nanoid()` in the main `create` call.
+      }
+    };
+  },
+}
+)
+);
 
 export async function sendMessage(
   content?: string,
@@ -83,10 +171,11 @@ export async function sendMessage(
   } = {},
   options: { abortSignal?: AbortSignal } = {},
 ) {
+  const currentThreadId = useStore.getState().threadId;
   if (content != null) {
     appendMessage({
       id: nanoid(),
-      threadId: THREAD_ID,
+      threadId: currentThreadId, // Use threadId from store
       role: "user",
       content: content,
       contentChunks: [content],
@@ -97,7 +186,7 @@ export async function sendMessage(
   const stream = chatStream(
     content ?? "[REPLAY]",
     {
-      thread_id: THREAD_ID,
+      thread_id: currentThreadId, // Use threadId from store
       interrupt_feedback: interruptFeedback,
       auto_accepted_plan: settings.autoAcceptedPlan,
       enable_background_investigation:
@@ -277,7 +366,7 @@ export async function listenToPodcast(researchId: string) {
     if (reportMessage?.content) {
       appendMessage({
         id: nanoid(),
-        threadId: THREAD_ID,
+        threadId: useStore.getState().threadId, // Use threadId from store
         role: "user",
         content: "Please generate a podcast for the above research.",
         contentChunks: [],
@@ -286,7 +375,7 @@ export async function listenToPodcast(researchId: string) {
       const podcastObject = { title, researchId };
       const podcastMessage: Message = {
         id: podCastMessageId,
-        threadId: THREAD_ID,
+        threadId: useStore.getState().threadId, // Use threadId from store
         role: "assistant",
         agent: "podcast",
         content: JSON.stringify(podcastObject),

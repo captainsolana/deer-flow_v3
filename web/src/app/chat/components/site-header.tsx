@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 import { StarFilledIcon, GitHubLogoIcon } from "@radix-ui/react-icons";
+import { PlusSquare } from "lucide-react";
 import Link from "next/link";
 
+import { Tooltip } from "~/components/deer-flow/tooltip";
 import { NumberTicker } from "~/components/magicui/number-ticker";
 import { Button } from "~/components/ui/button";
+import { useStore } from "~/core/store";
 import { env } from "~/env";
 
 export async function SiteHeader() {
@@ -16,7 +19,20 @@ export async function SiteHeader() {
           <span className="mr-1 text-2xl">🦌</span>
           <span>DeerFlow</span>
         </div>
-        <div className="relative flex items-center">
+        <div className="relative flex items-center space-x-2">
+          {" "}
+          {/* Added space-x-2 for spacing between buttons */}
+          <Tooltip title="New Chat">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                useStore.getState().initializeNewThread();
+              }}
+            >
+              <PlusSquare />
+            </Button>
+          </Tooltip>
           <div
             className="pointer-events-none absolute inset-0 z-0 h-full w-full rounded-full opacity-60 blur-2xl"
             style={{
